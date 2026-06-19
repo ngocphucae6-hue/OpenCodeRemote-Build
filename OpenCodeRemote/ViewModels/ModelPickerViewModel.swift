@@ -36,36 +36,6 @@ class ModelPickerViewModel: ObservableObject {
         return providers
     }
     
-    init() {
-        let config = ServerConfig.load()
-        self.api = OpenCodeAPI(config: config)
-        loadSavedSelection()
-    }
-    
-    func loadProviders() async {
-        isLoading = true
-        error = nil
-        do {
-            let response = try await api.listProviders()
-            providers = response
-            isLoading = false
-        } catch {
-            self.error = "Không thể tải danh sách: \(error.localizedDescription)"
-            isLoading = false
-        }
-    }
-    
-    func select(provider: String, model: String) {
-        selectedProvider = provider
-        selectedModel = model
-        UserDefaults.standard.set(provider, forKey: "selected_provider")
-        UserDefaults.standard.set(model, forKey: "selected_model")
-    }
-    
-    func isSelected(provider: String, model: String) -> Bool {
-        selectedProvider == provider && selectedModel == model
-    }
-    
     private func loadSavedSelection() {
         selectedProvider = UserDefaults.standard.string(forKey: "selected_provider")
         selectedModel = UserDefaults.standard.string(forKey: "selected_model")
