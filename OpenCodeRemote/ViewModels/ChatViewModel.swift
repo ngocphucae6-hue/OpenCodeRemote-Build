@@ -215,6 +215,19 @@ class ChatViewModel: ObservableObject {
     func sendMessage(_ text: String, imageDataURLs: [String] = []) async {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !imageDataURLs.isEmpty else { return }
 
+        // KIỂM TRA HỖ TRỢ ẢNH: nếu model hiện tại không nhận ảnh thì báo cho người dùng,
+        // tránh gửi lên server rồi nhận lỗi 'this model does not support image input'.
+        if !imageDataURLs.isEmpty {
+            if let providers = try? await api.listProviders(),
+               let model = providers
+                    .first(where: { $0.id == currentProvider })?
+                    .models.first(where: { $0.id == currentModel }),
+               model.supportsImages == false {
+                self.error = "Model \"\(model.displayName)\" không hỗ trợ gửi ảnh. Vui lòng chọn model khác (vd có hỗ trợ vision) hoặc bỏ ảnh đính kèm."
+                return
+            }
+        }
+
         // Hiển thị ngay tin nhắn của người dùng (optimistic) - không chờ server.
         var optimisticParts: [OCPart] = []
         if !text.isEmpty {

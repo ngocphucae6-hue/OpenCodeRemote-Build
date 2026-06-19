@@ -16,9 +16,16 @@ struct OCModel: Codable, Identifiable {
     let id: String
     let name: String?
     let description: String?
-    
+    /// Model có hỗ trợ đính kèm ảnh/file không (field "attachment" từ opencode).
+    let attachment: Bool?
+
     var displayName: String {
         name ?? id
+    }
+
+    /// True nếu model nhận được ảnh đầu vào.
+    var supportsImages: Bool {
+        attachment ?? false
     }
 }
 
@@ -39,4 +46,5 @@ struct OCModelRaw: Codable {
     let id: String
     let name: String?
     let description: String?
+    let attachment: Bool?
 }

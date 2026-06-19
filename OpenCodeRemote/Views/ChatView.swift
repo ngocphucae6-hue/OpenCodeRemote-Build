@@ -126,6 +126,14 @@ struct ChatView: View {
         }
         .onAppear { viewModel.connect() }
         .onDisappear { viewModel.disconnect() }
+        .alert("Thông báo", isPresented: Binding(
+            get: { viewModel.error != nil },
+            set: { if !$0 { viewModel.error = nil } }
+        )) {
+            Button("Đã hiểu", role: .cancel) { viewModel.error = nil }
+        } message: {
+            Text(viewModel.error ?? "")
+        }
     }
 
     private var statusBar: some View {

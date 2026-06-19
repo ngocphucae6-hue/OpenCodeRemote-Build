@@ -72,12 +72,12 @@ struct ModelPickerView: View {
                 .padding(.bottom, 24)
             }
 
-            // Toggle hide unused models
+            // Toggle chỉ hiện model yêu thích
             Toggle(isOn: $viewModel.hideUnusedModels) {
                 HStack(spacing: 8) {
-                    Image(systemName: "eye.slash")
+                    Image(systemName: "star.fill")
                         .font(.system(size: 14))
-                    Text("Chỉ hiện model đang dùng")
+                    Text("Chỉ hiện model yêu thích")
                         .font(.system(size: 14))
                 }
             }
@@ -127,6 +127,8 @@ struct ModelPickerView: View {
 
     private func modelRow(provider: OCProvider, model: OCModel, hue: Color) -> some View {
         let selected = viewModel.isSelected(provider: provider.id, model: model.id)
+        let isFavorite = viewModel.favoriteModels.contains(model.id)
+        
         return Button {
             onSelect(provider, model)
             dismiss()
@@ -139,9 +141,24 @@ struct ModelPickerView: View {
                     .shadow(color: hue.opacity(0.7), radius: 4)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(model.displayName)
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(.white.opacity(0.92))
+                    HStack {
+                        Text(model.displayName)
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.92))
+                        
+                        Spacer()
+                        
+                        // Favorite Button
+                        Button {
+                            viewModel.toggleFavorite(modelID: model.id)
+                        } label: {
+                            Image(systemName: isFavorite ? "star.fill" : "star")
+                                .font(.system(size: 14))
+                                .foregroundColor(isFavorite ? .yellow : .gray)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    
                     if let desc = model.description {
                         Text(desc)
                             .font(.system(size: 13))

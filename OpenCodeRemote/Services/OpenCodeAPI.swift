@@ -271,7 +271,7 @@ class OpenCodeAPI {
 
         return filtered.map { raw in
             let models = (raw.models ?? [:]).values.map { m in
-                OCModel(id: m.id, name: m.name, description: m.description)
+                OCModel(id: m.id, name: m.name, description: m.description, attachment: m.attachment)
             }.sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
             return OCProvider(
                 id: raw.id,

@@ -8,6 +8,7 @@ class ModelPickerViewModel: ObservableObject {
     @Published var selectedProvider: String?
     @Published var selectedModel: String?
     @Published var hideUnusedModels: Bool = false
+    @Published var favoriteModelIDs: Set<String> = []
 
     private let api: OpenCodeAPI
 
@@ -15,6 +16,7 @@ class ModelPickerViewModel: ObservableObject {
         let config = ServerConfig.load()
         self.api = OpenCodeAPI(config: config)
         loadSavedSelection()
+        loadFavorites()
     }
 
     func loadProviders() async {
@@ -37,30 +39,46 @@ class ModelPickerViewModel: ObservableObject {
         UserDefaults.standard.set(model, forKey: "selected_model")
     }
 
+    func toggleFavorite(modelID: String) {
+        if favoriteModelIDs.contains(modelID) {
+            favoriteModelIDs.remove(modelID)
+        } else {
+            favoriteModelIDs.insert(modelID)
+        }
+        saveFavorites()
+    }
+
     func isSelected(provider: String, model: String) -> Bool {
         selectedProvider == provider && selectedModel == model
     }
 
-    /// Providers đã lọc theo hideUnusedModels
     var filteredProviders: [OCProvider] {
         if !hideUnusedModels {
             return providers
         }
-        guard let selectedProvider = selectedProvider,
-              let selectedModel = selectedModel else {
-            return providers
+        
+        // Filter: Only keep providers that have at least one favorite model
+        let filtered = providers.compactMap { provider -> OCProvider? in
+            let favModels = provider.models.filter { favoriteModelIDs.contains($0.id) }
+            if favModels.isEmpty { return nil }
+            return OCProvider(id: provider.id, name: provider.name, models: favModels)
         }
-        if let provider = providers.first(where: { $0.id == selectedProvider }) {
-            let filteredModels = provider.models.filter { $0.id == selectedModel }
-            if !filteredModels.isEmpty {
-                return [OCProvider(id: provider.id, name: provider.name, models: filteredModels)]
-            }
-        }
-        return providers
+        
+        return filtered.isEmpty ? providers : filtered
     }
 
     private func loadSavedSelection() {
         selectedProvider = UserDefaults.standard.string(forKey: "selected_provider")
         selectedModel = UserDefaults.standard.string(forKey: "selected_model")
+    }
+
+    private func loadFavorites() {
+        if let saved = UserDefaults.standard.stringArray(forKey: "favorite_model_ids") {
+            favoriteModelIDs = Set(saved)
+        }
+    }
+
+    private func saveFavorites() {
+        UserDefaults.standard.set(Array(favoriteModelIDs), forKey: "favorite_model_ids")
     }
 }
