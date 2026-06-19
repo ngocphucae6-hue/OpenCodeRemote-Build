@@ -238,30 +238,26 @@ class ChatViewModel: ObservableObject {
         }
     }
     
+    /// Lưu tin nhắn thất bại để "Thử lại".
+    @Published var failedText: String?
+    @Published var failedImages: [String]?
+
     func sendMessage(_ text: String, imageDataURLs: [String] = []) async {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !imageDataURLs.isEmpty else { return }
 
-        // KIỂM TRA HỖ TRỢ ẢNH: nếu model hiện tại không nhận ảnh thì báo cho người dùng,
-        // tránh gửi lên server rồi nhận lỗi 'this model does not support image input'.
+        // KIỂM TRA HỖ TRỢ ẢNH
         if !imageDataURLs.isEmpty {
             if let providers = try? await api.listProviders(),
                let model = providers
                     .first(where: { $0.id == currentProvider })?
                     .models.first(where: { $0.id == currentModel }),
                model.supportsImages == false {
-                self.error = "Model \"\(model.displayName)\" không hỗ trợ gửi ảnh. Vui lòng chọn model khác (vd có hỗ trợ vision) hoặc bỏ ảnh đính kèm."
+                self.error = "Model \"\(model.displayName)\" không hỗ trợ gửi ảnh. Vui lòng chọn model khác hoặc bỏ ảnh đính kèm."
                 return
             }
         }
 
-        // Hiển thị ngay tin nhắn của người dùng (optimistic) - không chờ server.
-        var optimisticParts: [OCPart] = []
-        if !text.isEmpty {
-            optimisticParts.append(OCPart(id: "local_\(UUID().uuidString)", type: "text", text: text, tool: nil, callID: nil, state: nil, mime: nil, filename: nil, url: nil))
-        }
-        for url in imageDataURLs {
-            optimisticParts.append(OCPart(id: "local_\(UUID().uuidString)", type: "file", text: nil, tool: nil, callID: nil, state: nil, mime: "image/jpeg", filename: "image.jpg", url: url))
-        }
+        let optimisticParts: [OCPart] = buildParts(text: text, imageDataURLs: imageDataURLs)
         let localID = "local_msg_\(UUID().uuidString)"
         let optimisticMsg = OCMessageWithParts(
             info: OCMessage(id: localID, role: "user", sessionID: session.id, time: nil, providerID: nil, modelID: nil, agent: nil, error: nil),
@@ -271,17 +267,47 @@ class ChatViewModel: ObservableObject {
 
         isSending = true
         sessionStatus = "busy"
+        failedText = nil
+        failedImages = nil
 
         do {
             try await api.sendMessageAsync(sessionId: session.id, text: text, provider: currentProvider, model: currentModel, imageDataURLs: imageDataURLs, agent: agentMode, directory: dir)
-            // Tải lại ngay để lấy tin nhắn thật từ server, rồi poll tiếp.
             await loadMessages()
             startPolling()
         } catch {
-            self.error = "Gửi thất bại: \(error.localizedDescription)"
+            // Lưu lại nội dung để có thể thử lại
+            failedText = text
+            failedImages = imageDataURLs
+            self.error = error.localizedDescription
             sessionStatus = "idle"
         }
         isSending = false
+    }
+
+    func retrySend() async {
+        guard let text = failedText else { return }
+        let images = failedImages ?? []
+        failedText = nil
+        failedImages = nil
+        await sendMessage(text, imageDataURLs: images)
+    }
+
+    func dismissError() {
+        error = nil
+        failedText = nil
+        failedImages = nil
+        sessionStatus = "idle"
+    }
+
+    private func buildParts(text: String, imageDataURLs: [String]) -> [OCPart] {
+        var parts: [OCPart] = []
+        if !text.isEmpty {
+            parts.append(OCPart(id: "local_\(UUID().uuidString)", type: "text", text: text, tool: nil, callID: nil, state: nil, mime: nil, filename: nil, url: nil))
+        }
+        for url in imageDataURLs {
+            parts.append(OCPart(id: "local_\(UUID().uuidString)", type: "file", text: nil, tool: nil, callID: nil, state: nil, mime: "image/jpeg", filename: "image.jpg", url: url))
+        }
+        return parts
     }
     
     func updateModel(provider: String, model: String) {

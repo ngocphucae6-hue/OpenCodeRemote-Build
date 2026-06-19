@@ -181,8 +181,19 @@ class OpenCodeAPI {
         guard let request = makeRequest(path: "/session/\(sessionId)/prompt_async", method: "POST", body: body, directory: directory) else {
             throw APIError.invalidURL
         }
-        let (_, response) = try await session.data(for: request)
+        let (data, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 204 else {
+            // Đọc lỗi từ body server nếu có
+            if let serverErr = try? JSONDecoder().decode(OCServerError.self, from: data) {
+                throw APIError.serverError(serverErr.message ?? serverErr.error ?? "Yêu cầu thất bại")
+            }
+            // Nếu session đang bận -> thông báo rõ
+            if let resp = response as? HTTPURLResponse {
+                if resp.statusCode == 409 {
+                    throw APIError.serverError("Session đang bận, vui lòng đợi hoặc ấn Dừng trước.")
+                }
+                throw APIError.serverError("Máy chủ trả về HTTP \(resp.statusCode)")
+            }
             throw APIError.requestFailed
         }
     }
@@ -344,6 +355,7 @@ class OpenCodeAPI {
         case encodingFailed
         case requestFailed
         case decodingFailed
+        case serverError(String)
         
         var errorDescription: String? {
             switch self {
@@ -351,7 +363,13 @@ class OpenCodeAPI {
             case .encodingFailed: return "Lỗi mã hóa dữ liệu"
             case .requestFailed: return "Yêu cầu thất bại"
             case .decodingFailed: return "Lỗi giải mã phản hồi"
+            case .serverError(let msg): return msg
             }
         }
     }
+}
+
+struct OCServerError: Codable {
+    let error: String?
+    let message: String?
 }

@@ -126,11 +126,16 @@ struct ChatView: View {
         }
         .onAppear { viewModel.connect() }
         .onDisappear { viewModel.disconnect() }
-        .alert("Thông báo", isPresented: Binding(
+        .alert(viewModel.failedText != nil ? "Gửi thất bại" : "Thông báo", isPresented: Binding(
             get: { viewModel.error != nil },
-            set: { if !$0 { viewModel.error = nil } }
+            set: { if !$0 { viewModel.dismissError() } }
         )) {
-            Button("Đã hiểu", role: .cancel) { viewModel.error = nil }
+            if viewModel.failedText != nil {
+                Button("Bỏ qua", role: .cancel) { viewModel.dismissError() }
+                Button("Thử lại") { Task { await viewModel.retrySend() } }
+            } else {
+                Button("Đã hiểu", role: .cancel) { viewModel.dismissError() }
+            }
         } message: {
             Text(viewModel.error ?? "")
         }
