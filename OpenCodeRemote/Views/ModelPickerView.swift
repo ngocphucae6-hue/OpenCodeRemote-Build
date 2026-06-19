@@ -127,7 +127,7 @@ struct ModelPickerView: View {
 
     private func modelRow(provider: OCProvider, model: OCModel, hue: Color) -> some View {
         let selected = viewModel.isSelected(provider: provider.id, model: model.id)
-        let isFavorite = viewModel.favoriteModels.contains(model.id)
+        let isFavorite = viewModel.favoriteModelIDs.contains(model.id)
         
         return Button {
             onSelect(provider, model)

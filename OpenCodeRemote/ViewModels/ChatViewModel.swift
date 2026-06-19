@@ -127,11 +127,29 @@ class ChatViewModel: ObservableObject {
         do {
             let serverMessages = try await api.listMessages(sessionId: session.id, directory: dir)
             mergeServerMessages(serverMessages)
+            checkAgentError(serverMessages)
             streamTick &+= 1
             isLoading = false
         } catch {
             if showLoading { self.error = "Không thể tải tin nhắn: \(error.localizedDescription)" }
             isLoading = false
+        }
+    }
+
+    /// ID các message lỗi đã báo rồi - tránh thông báo trùng.
+    private var notifiedErrorIDs = Set<String>()
+
+    /// Phát hiện lỗi agent (message assistant có error) -> hiện alert + bắn notification.
+    private func checkAgentError(_ serverMessages: [OCMessageWithParts]) {
+        for msg in serverMessages {
+            guard msg.info.role == "assistant",
+                  let err = msg.info.error,
+                  let mid = msg.info.id,
+                  !notifiedErrorIDs.contains(mid) else { continue }
+            notifiedErrorIDs.insert(mid)
+            let detail = err.data?.message ?? err.name ?? "Agent gặp lỗi không xác định"
+            self.error = detail
+            NotificationManager.shared.notifyError(detail)
         }
     }
 

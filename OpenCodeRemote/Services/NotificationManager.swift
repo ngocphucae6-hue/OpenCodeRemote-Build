@@ -136,6 +136,11 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
         post(title: "🔒 Yêu cầu quyền", body: p.displayText)
     }
 
+    /// Bắn thông báo lỗi của agent (gọi được từ nơi khác, vd ChatViewModel).
+    func notifyError(_ message: String) {
+        post(title: "⚠️ Agent gặp lỗi", body: message)
+    }
+
     private func post(title: String, body: String) {
         let generator = UINotificationFeedbackGenerator()
         generator.notificationOccurred(.warning)
