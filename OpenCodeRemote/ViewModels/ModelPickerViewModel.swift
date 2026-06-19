@@ -7,7 +7,9 @@ class ModelPickerViewModel: ObservableObject {
     @Published var error: String?
     @Published var selectedProvider: String?
     @Published var selectedModel: String?
-    @Published var hideUnusedModels: Bool = false
+    @Published var hideUnusedModels: Bool = UserDefaults.standard.object(forKey: "hide_unused_models") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(hideUnusedModels, forKey: "hide_unused_models") }
+    }
     @Published var favoriteModelIDs: Set<String> = []
 
     private let api: OpenCodeAPI

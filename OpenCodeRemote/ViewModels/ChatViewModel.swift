@@ -138,19 +138,27 @@ class ChatViewModel: ObservableObject {
 
     /// ID các message lỗi đã báo rồi - tránh thông báo trùng.
     private var notifiedErrorIDs = Set<String>()
+    /// Đã nạp xong lịch sử lần đầu chưa. Lỗi có sẵn trong lịch sử chỉ được "ghi nhận"
+    /// (không báo lại), chỉ lỗi MỚI phát sinh real-time sau đó mới hiện thông báo.
+    private var didSeedErrors = false
 
     /// Phát hiện lỗi agent (message assistant có error) -> hiện alert + bắn notification.
+    /// Lần đầu (lúc mở session) chỉ seed im lặng các lỗi cũ; sau đó mới báo lỗi mới.
     private func checkAgentError(_ serverMessages: [OCMessageWithParts]) {
+        let isInitial = !didSeedErrors
         for msg in serverMessages {
             guard msg.info.role == "assistant",
                   let err = msg.info.error,
                   let mid = msg.info.id,
                   !notifiedErrorIDs.contains(mid) else { continue }
             notifiedErrorIDs.insert(mid)
+            // Lần seed đầu: chỉ ghi nhận, không hiển thị lỗi cũ.
+            if isInitial { continue }
             let detail = err.data?.message ?? err.name ?? "Agent gặp lỗi không xác định"
             self.error = detail
             NotificationManager.shared.notifyError(detail)
         }
+        didSeedErrors = true
     }
 
     /// Hợp nhất snapshot từ server vào mảng hiện tại THEO TỪNG PHẦN TỬ (không gán lại cả mảng),
