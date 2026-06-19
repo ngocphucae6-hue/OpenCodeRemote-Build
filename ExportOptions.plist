@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>method</key>
+    <string>development</string>
+    <key>signingStyle</key>
+    <string>manual</string>
+    <key>teamID</key>
+    <string>JQiRAaCKdW</string>
+    <key>compileBitcode</key>
+    <false/>
+    <key>stripSwiftSymbols</key>
+    <true/>
+    <key>destination</key>
+    <string>export</string>
+    <key>provisioningProfiles</key>
+    <dict>
+        <key>com.opencode.remote.ocr2026</key>
+        <string>JQiRAaCKdW-03062026</string>
+    </dict>
+    <key>signingCertificate</key>
+    <string>Apple Development</string>
+</dict>
+</plist>

@@ -1,0 +1,92 @@
+name: Build IPA
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 15
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app
+
+      - name: Run unit tests
+        run: |
+          xcodebuild test \
+            -project OpenCodeRemote.xcodeproj \
+            -scheme OpenCodeRemote \
+            -destination 'platform=iOS Simulator,name=iPhone 15' \
+            CODE_SIGNING_ALLOWED=NO
+
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 15
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app
+
+      - name: Build unsigned archive
+        run: |
+          xcodebuild -project OpenCodeRemote.xcodeproj \
+            -scheme OpenCodeRemote \
+            -configuration Release \
+            -archivePath $RUNNER_TEMP/OpenCodeRemote.xcarchive \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            clean archive
+
+      - name: Create unsigned IPA
+        run: |
+          mkdir -p $RUNNER_TEMP/Payload
+          cp -r $RUNNER_TEMP/OpenCodeRemote.xcarchive/Products/Applications/OpenCodeRemote.app $RUNNER_TEMP/Payload/
+          cd $RUNNER_TEMP
+          zip -qry OpenCodeRemote-unsigned.ipa Payload
+
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenCodeRemote-tailscale-unsigned-IPA
+          path: ${{ runner.temp }}/OpenCodeRemote-unsigned.ipa
+
+      - name: Install zsign and sign IPA
+        id: sign
+        continue-on-error: true
+        env:
+          P12_BASE64: ${{ secrets.P12_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+          PROVISION_PROFILE_BASE64: ${{ secrets.PROVISION_PROFILE_BASE64 }}
+        run: |
+          # Thiếu cert/profile -> bỏ qua bước ký (vẫn có IPA unsigned).
+          if [ -z "$P12_BASE64" ] || [ -z "$PROVISION_PROFILE_BASE64" ]; then
+            echo "Thiếu secret ký (P12_BASE64/PROVISION_PROFILE_BASE64) -> bỏ qua ký."
+            exit 0
+          fi
+          # Install zsign
+          brew install openssl
+          git clone https://github.com/zhlynn/zsign.git $RUNNER_TEMP/zsign
+          cd $RUNNER_TEMP/zsign
+          git checkout $(git rev-list --max-parents=0 HEAD)
+          g++ *.cpp common/*.cpp -o zsign -lcrypto -I/opt/homebrew/opt/openssl@3/include -L/opt/homebrew/opt/openssl@3/lib -O2
+          
+          # Decode cert and profile
+          echo -n "$P12_BASE64" | base64 --decode -o $RUNNER_TEMP/cert.p12
+          echo -n "$PROVISION_PROFILE_BASE64" | base64 --decode -o $RUNNER_TEMP/profile.mobileprovision
+          
+          # Sign IPA
+          cd $RUNNER_TEMP
+          ./zsign/zsign -k cert.p12 -p "$P12_PASSWORD" -m profile.mobileprovision -o OpenCodeRemote-signed.ipa -b com.ngocphucae6.opencoderemote OpenCodeRemote-unsigned.ipa
+
+      - name: Upload signed IPA
+        if: ${{ hashFiles(format('{0}/OpenCodeRemote-signed.ipa', runner.temp)) != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenCodeRemote-signed-IPA
+          path: ${{ runner.temp }}/OpenCodeRemote-signed.ipa
