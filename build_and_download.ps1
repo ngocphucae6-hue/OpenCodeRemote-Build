@@ -50,16 +50,25 @@ if ($run.conclusion -ne "success") {
 }
 
 Write-Host "Build succeeded. Downloading IPA..."
-$ipaSrc = Join-Path $dest "OpenCodeRemote.ipa"
-Remove-Item -LiteralPath $ipaSrc -Force -ErrorAction SilentlyContinue
+$ipaDest = Join-Path $dest "OpenCodeRemote-unsigned.ipa"
 
-gh run download $run.databaseId --repo $repo --name $artifact --dir $dest
+# Download to temp folder then move (avoid extraction conflicts)
+$tempDir = Join-Path $dest "temp_$(Get-Random)"
+New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
 
-if (Test-Path $ipaSrc) {
-    $ipaDst = Join-Path $dest "OpenCodeRemote-signed.ipa"
-    Rename-Item -Path $ipaSrc -NewName $ipaDst -Force
-    Write-Host "✅ IPA saved: $ipaDst"
+gh run download $run.databaseId --repo $repo --name $artifact --dir $tempDir
+
+$ipaTemp = Join-Path $tempDir "OpenCodeRemote-unsigned.ipa"
+if (Test-Path $ipaTemp) {
+    # Ensure destination doesn't exist before moving
+    if (Test-Path $ipaDest) {
+        Remove-Item -LiteralPath $ipaDest -Force -ErrorAction SilentlyContinue
+    }
+    Move-Item -Path $ipaTemp -Destination $ipaDest -Force
+    Remove-Item -Recurse -Force $tempDir -ErrorAction SilentlyContinue
+    Write-Host "✅ IPA saved: $ipaDest"
 } else {
-    Write-Error "Download failed - artifact not found"
+    Remove-Item -Recurse -Force $tempDir -ErrorAction SilentlyContinue
+    Write-Error "IPA not found in artifact"
     exit 1
 }
