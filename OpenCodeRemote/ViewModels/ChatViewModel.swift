@@ -411,21 +411,27 @@ class ChatViewModel: ObservableObject {
 
         eventService.onEvent = { [weak self] type, data in
             guard let self = self else { return }
+            var handled = false
 
-            // Streaming incremental: cập nhật tại chỗ cho mượt (không reload toàn bộ).
+            // Incremental text streaming (character-by-character or chunk)
             if type.contains("message.part.delta") {
                 Task { @MainActor in self.applyPartDelta(data) }
-                return
+                handled = true
             }
-            if type.contains("message.part.updated") || type.contains("message.part.removed") {
-                Task { @MainActor in self.applyPartUpdate(data, removed: type.contains("removed")) }
-                return
+            // Part creation / update / removal
+            else if type.contains("message.part.") && (type.contains("created") || type.contains("updated") || type.contains("removed")) {
+                let removed = type.contains("removed")
+                Task { @MainActor in self.applyPartUpdate(data, removed: removed) }
+                handled = true
             }
-            if type.contains("message.updated") || type.contains("message.removed") {
-                Task { @MainActor in self.applyMessageUpdate(data, removed: type.contains("removed")) }
-                return
+            // Message creation / update / removal
+            else if type.contains("message.") && (type.contains("created") || type.contains("updated") || type.contains("removed")) {
+                let removed = type.contains("removed")
+                Task { @MainActor in self.applyMessageUpdate(data, removed: removed) }
+                handled = true
             }
-            if type.contains("session.status") {
+            // Session status changes (busy/idle/...)
+            else if type.contains("session.status") {
                 Task { @MainActor in
                     await self.loadTodos()
                     let statuses = try? await self.api.getSessionStatus(directory: self.dir)
@@ -433,12 +439,22 @@ class ChatViewModel: ObservableObject {
                         self.sessionStatus = status
                     }
                 }
+                handled = true
             }
-            // Agent hỏi / xin quyền -> parse thẳng từ event, fallback nạp lại danh sách.
-            if type.contains("question") || type.contains("permission") {
+            // Agent hỏi / xin quyền
+            else if type.contains("question") || type.contains("permission") {
                 Task { @MainActor in
                     self.handlePendingEvent(type: type, data: data)
                     await self.refreshPending()
+                }
+                handled = true
+            }
+
+            // Fallback: nếu event type chưa được xử lý (có thể server dùng tên khác), gọi reload gộp.
+            if !handled {
+                print("[ChatViewModel] Unknown SSE event: \(type)")
+                Task { @MainActor in
+                    self.scheduleCoalescedReload()
                 }
             }
         }
