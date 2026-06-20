@@ -1,4 +1,4 @@
-name: Build Signed IPA
+name: Build IPA
 
 on:
   push:
@@ -11,67 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Get Bundle ID
-        id: bundle
-        run: |
-          BUNDLE_ID=$(xcodebuild -project OpenCodeRemote.xcodeproj -scheme OpenCodeRemote -configuration Release -showBuildSettings | awk '/PRODUCT_BUNDLE_IDENTIFIER/ {print $3; exit}')
-          if [ -z "$BUNDLE_ID" ]; then
-            echo "ERROR: Could not determine bundle identifier"
-            exit 1
-          fi
-          echo "BUNDLE_ID=$BUNDLE_ID" >> $GITHUB_OUTPUT
-        shell: bash
-
-      - name: Import Apple Certificate
-        uses: apple-actions/import-codesign-certs@v2
-        with:
-          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
-          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-
-      - name: Install Provisioning Profile
-        id: profile
-        run: |
-          echo "${{ secrets.APPLE_PROVISIONING_PROFILE }}" | base64 --decode > profile.mobileprovision
-          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles/
-          cp profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/
-          security cms -D -i profile.mobileprovision > profile.plist
-          PROFILE_NAME=$(/usr/libexec/PlistBuddy -c "Print :Name" profile.plist)
-          TEAM_ID=$(/usr/libexec/PlistBuddy -c "Print :TeamIdentifier:0" profile.plist)
-          echo "PROFILE_NAME=$PROFILE_NAME" >> $GITHUB_OUTPUT
-          echo "TEAM_ID=$TEAM_ID" >> $GITHUB_OUTPUT
-        shell: bash
-
-      - name: Create ExportOptions.plist
-        run: |
-          BUNDLE_ID="${{ steps.bundle.outputs.BUNDLE_ID }}"
-          PROFILE_NAME="${{ steps.profile.outputs.PROFILE_NAME }}"
-          TEAM_ID="${{ steps.profile.outputs.TEAM_ID }}"
-          cat > ExportOptions.plist << EOF
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>method</key>
-            <string>ad-hoc</string>
-            <key>provisioningProfiles</key>
-            <dict>
-              <key>$BUNDLE_ID</key>
-              <string>$PROFILE_NAME</string>
-            </dict>
-            <key>signingStyle</key>
-            <string>manual</string>
-            <key>teamID</key>
-            <string>$TEAM_ID</string>
-            <key>compileBitcode</key>
-            <false/>
-            <key>stripSwiftSymbols</key>
-            <true/>
-          </dict>
-          </plist>
-          EOF
-        shell: bash
-
-      - name: Build and sign archive
+      - name: Build unsigned archive
         run: |
           xcodebuild -project OpenCodeRemote.xcodeproj \
             -scheme OpenCodeRemote \
@@ -79,19 +19,20 @@ jobs:
             -archivePath $RUNNER_TEMP/OpenCodeRemote.xcarchive \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
-            DEVELOPMENT_TEAM='${{ steps.profile.outputs.TEAM_ID }}' \
-            PROVISIONING_PROFILE_SPECIFIER='${{ steps.profile.outputs.PROFILE_NAME }}' \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
             clean archive
 
-      - name: Export signed IPA
+      - name: Create unsigned IPA
         run: |
-          xcodebuild -exportArchive \
-            -archivePath $RUNNER_TEMP/OpenCodeRemote.xcarchive \
-            -exportOptionsPlist ExportOptions.plist \
-            -exportPath $RUNNER_TEMP
+          mkdir -p $RUNNER_TEMP/Payload
+          cp -r $RUNNER_TEMP/OpenCodeRemote.xcarchive/Products/Applications/OpenCodeRemote.app $RUNNER_TEMP/Payload/
+          cd $RUNNER_TEMP
+          zip -qry OpenCodeRemote-unsigned.ipa Payload
 
-      - name: Upload signed IPA
+      - name: Upload unsigned IPA
         uses: actions/upload-artifact@v4
         with:
-          name: OpenCodeRemote-signed-IPA
-          path: ${{ runner.temp }}/OpenCodeRemote.ipa
+          name: OpenCodeRemote-unsigned-IPA
+          path: ${{ runner.temp }}/OpenCodeRemote-unsigned.ipa

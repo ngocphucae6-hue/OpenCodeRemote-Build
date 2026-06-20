@@ -1,6 +1,6 @@
 $repo = "ngocphucae6-hue/OpenCodeRemote-Build"
 $workflow = ".github/workflows/build-ipa.yml"
-$artifact = "OpenCodeRemote-signed-IPA"
+$artifact = "OpenCodeRemote-unsigned-IPA"
 $dest = "C:\Users\Admin\Desktop\OpenCodeRemote-Build\OpenCodeRemote-Build\Downloads"
 
 New-Item -ItemType Directory -Force -Path $dest | Out-Null
