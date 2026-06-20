@@ -15,6 +15,10 @@ jobs:
         id: bundle
         run: |
           BUNDLE_ID=$(xcodebuild -project OpenCodeRemote.xcodeproj -scheme OpenCodeRemote -configuration Release -showBuildSettings | awk '/PRODUCT_BUNDLE_IDENTIFIER/ {print $3; exit}')
+          if [ -z "$BUNDLE_ID" ]; then
+            echo "ERROR: Could not determine bundle identifier"
+            exit 1
+          fi
           echo "BUNDLE_ID=$BUNDLE_ID" >> $GITHUB_OUTPUT
         shell: bash
 
@@ -32,13 +36,16 @@ jobs:
           cp profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/
           security cms -D -i profile.mobileprovision > profile.plist
           PROFILE_NAME=$(/usr/libexec/PlistBuddy -c "Print :Name" profile.plist)
+          TEAM_ID=$(/usr/libexec/PlistBuddy -c "Print :TeamIdentifier:0" profile.plist)
           echo "PROFILE_NAME=$PROFILE_NAME" >> $GITHUB_OUTPUT
+          echo "TEAM_ID=$TEAM_ID" >> $GITHUB_OUTPUT
         shell: bash
 
       - name: Create ExportOptions.plist
         run: |
           BUNDLE_ID="${{ steps.bundle.outputs.BUNDLE_ID }}"
           PROFILE_NAME="${{ steps.profile.outputs.PROFILE_NAME }}"
+          TEAM_ID="${{ steps.profile.outputs.TEAM_ID }}"
           cat > ExportOptions.plist << EOF
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -53,6 +60,8 @@ jobs:
             </dict>
             <key>signingStyle</key>
             <string>manual</string>
+            <key>teamID</key>
+            <string>$TEAM_ID</string>
             <key>compileBitcode</key>
             <false/>
             <key>stripSwiftSymbols</key>
@@ -70,6 +79,8 @@ jobs:
             -archivePath $RUNNER_TEMP/OpenCodeRemote.xcarchive \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
+            DEVELOPMENT_TEAM='${{ steps.profile.outputs.TEAM_ID }}' \
+            PROVISIONING_PROFILE_SPECIFIER='${{ steps.profile.outputs.PROFILE_NAME }}' \
             clean archive
 
       - name: Export signed IPA
