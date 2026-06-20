@@ -364,9 +364,9 @@ class ChatViewModel: ObservableObject {
     
     private func startPolling() {
         pollTimer?.invalidate()
-        // SSE streaming lo cập nhật mượt theo thời gian thực. Poll chỉ là lưới an toàn
-        // (bù khi vài event delta bị lỡ) nên 2s là đủ, đỡ tốn pin/mạng so với 1s.
-        pollTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+        // SSE streaming lo cập nhật mượt real-time. Poll chỉ là backup (bù event bị lỡ).
+        // Tần suất 5s để giảm load, tránh xung đột với SSE.
+        pollTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
             guard let self = self else { return }
             Task { @MainActor in
                 await self.loadMessages()
@@ -376,11 +376,11 @@ class ChatViewModel: ObservableObject {
                 let statuses = try? await self.api.getSessionStatus(directory: self.dir)
                 if let status = statuses?[self.session.id]?.status {
                     self.sessionStatus = status
-                    // Vẫn tiếp tục poll nếu còn câu hỏi/quyền đang chờ trả lời.
+                    // Dừng poll khi session idle và không có câu hỏi/quyền chờ.
                     if status != "busy" && status != "pending"
                         && self.pendingQuestion == nil && self.pendingPermission == nil {
                         self.stopPolling()
-                        // Đồng bộ lần cuối để chốt nội dung đầy đủ.
+                        // Đồng bộ lần cuối.
                         await self.loadMessages()
                     }
                 }
@@ -519,6 +519,7 @@ class ChatViewModel: ObservableObject {
         } else {
             messages[mIdx].parts.append(part)
         }
+        streamTick &+= 1
     }
 
     /// Thêm/cập nhật message (vd assistant message mới khi bắt đầu trả lời).
@@ -532,6 +533,7 @@ class ChatViewModel: ObservableObject {
 
         if removed {
             messages.removeAll { $0.info.id == msgID }
+            streamTick &+= 1
             return
         }
 
@@ -543,6 +545,7 @@ class ChatViewModel: ObservableObject {
             // Việc dedup tin local_ đã có bản trên server do mergeServerMessages lo.
             messages.append(OCMessageWithParts(info: info, parts: []))
         }
+        streamTick &+= 1
     }
 
     /// Parse câu hỏi/quyền trực tiếp từ dữ liệu SSE event (tránh phụ thuộc directory).
